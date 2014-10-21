@@ -55,6 +55,8 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 @implementation Afloat
 
+@synthesize resizeSection = _resizeSection;
+
 + (id) sharedInstance {
 	static id myself = nil;
 	if (!myself) myself = [self new];
@@ -518,8 +520,38 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 			}
 				
 			case NSLeftMouseDown:
-			case NSRightMouseDown:
+			case NSRightMouseDown: {
+                // on right click, record which direction we should resize in on the drag
+                
+                wnd = [evt window];
+
+                struct ResizeSection resizeSection;
+
+                NSPoint clickPoint = [evt locationInWindow];
+
+                NSSize wndSize = [wnd frame].size;
+
+                // dm todo recalculating this every time can create awkwardness; the window size is changing, the clickpoint is not
+                if (clickPoint.x < wndSize.width/3) {
+                    resizeSection.xResizeDirection = left;
+                } else if (clickPoint.x > 2*wndSize.width/3) {
+                    resizeSection.xResizeDirection = right;
+                } else {
+                    resizeSection.xResizeDirection = noX;
+                }
+
+                if (clickPoint.y < wndSize.height/3) {
+                    resizeSection.yResizeDirection = bottom;
+                } else  if (clickPoint.y > 2*wndSize.height/3) {
+                    resizeSection.yResizeDirection = top;
+                } else {
+                    resizeSection.yResizeDirection = noY;
+                }
+
+                [hub setResizeSection:resizeSection];
+
 				return; // filter it
+            }
 				
 			case NSLeftMouseDragged: {
 				wnd = [evt window];
@@ -534,24 +566,61 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 				
 			case NSRightMouseDragged: {
 				wnd = [evt window];
+                struct ResizeSection resizeSection = [hub resizeSection];
 				if ([hub isWindowIgnoredByAfloat:wnd]) wnd = [hub currentWindow];
-			
+                
 				if (wnd && ([wnd styleMask] & NSResizableWindowMask)) {
-					NSSize minSize = [wnd minSize];
-					
-					frame = [wnd frame];
-					frame.size.width += [evt deltaX];
-					frame.size.height += [evt deltaY];
-					
-					if (frame.size.width < minSize.width)
-						frame.size.width = minSize.width;
-					
-					if (frame.size.height < minSize.height)
-						frame.size.height = minSize.height;
-					else
-						frame.origin.y -= [evt deltaY];
-					
-					[wnd setFrame:frame display:YES];
+
+                    NSSize minSize = [wnd minSize];
+
+                    frame = [wnd frame];
+                    
+                    switch (resizeSection.xResizeDirection) {
+                        case right:
+                            frame.size.width += [evt deltaX];
+                            if (frame.size.width < minSize.width) {
+                                frame.size.width = minSize.width;
+                            }
+                            break;
+                        case left:
+                            frame.size.width -= [evt deltaX];
+                            if (frame.size.width < minSize.width) {
+                                frame.size.width = minSize.width;
+                            } else {
+                                frame.origin.x += [evt deltaX];
+                            }
+                            break;
+                        case noX:
+                            // nothing to do
+                            break;
+                        default:
+                            [NSException raise:@"Unknown xResizeSection" format:@"No case for %d", resizeSection.xResizeDirection];
+                    }
+                    
+                    switch (resizeSection.yResizeDirection) {
+                        case top:
+                            frame.size.height -= [evt deltaY];
+                            if (frame.size.height < minSize.height) {
+                                frame.size.height = minSize.height;
+                            }
+                            break;
+                        case bottom:
+                            frame.size.height += [evt deltaY];
+                            if (frame.size.height < minSize.height) {
+                                frame.size.height = minSize.height;
+                            } else {
+                                frame.origin.y -= [evt deltaY];
+                            }
+                            break;
+                        case noY:
+                            // nothing to do
+                            break;
+                        default:
+                            [NSException raise:@"Unknown yResizeSection" format:@"No case for %d", resizeSection.yResizeDirection];
+                    }
+
+                    [wnd setFrame:frame display:YES];
+
 					return; // filter it once done
 				}
 			}
@@ -563,7 +632,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 			case NSScrollWheel: {
 				wnd = [evt window];
 				if ([hub isWindowIgnoredByAfloat:wnd]) wnd = [hub currentWindow];
-				
+
 				[hub setAlphaValueByDelta:([evt deltaY] * 0.10) forWindow:wnd animate:NO];
 				return; // filter it
 			}
